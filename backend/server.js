@@ -3,6 +3,8 @@ require('dotenv').config();
 const cors = require('cors');
 const express = require('express');
 const cache = require('./cache');
+const mergeSort = require('./mergeSort');
+const { performance } = require('node:perf_hooks');
 
 const app = express();
 const PORT = Number.parseInt(process.env.PORT, 10) || 3000;
@@ -41,7 +43,9 @@ function mapMovie(movie) {
     posterPath: movie.poster_path,
     rating: movie.vote_average,
     voteCount: movie.vote_count,
+    popularity: movie.popularity,
     releaseDate: movie.release_date,
+    originalTitle: movie.original_title,
     genreIds: movie.genre_ids || (movie.genres || []).map((genre) => genre.id),
     overview: movie.overview,
   };
@@ -58,6 +62,15 @@ function mapMoviePage(payload) {
 
 function sendError(res, status, message) {
   return res.status(status).json({ error: message });
+}
+
+function handleRequestError(res, error) {
+  if (!(error instanceof TmdbError)) {
+    console.error('เกิดข้อผิดพลาดระหว่างประมวลผลคำขอ:', error);
+    return sendError(res, 500, 'เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์');
+  }
+
+  return sendError(res, error.statusCode, error.message);
 }
 
 async function fetchTmdb(path, params = {}) {
@@ -108,30 +121,79 @@ async function fetchTmdb(path, params = {}) {
   }
 }
 
-async function respondWithCache(res, key, fetchData, mapData = (value) => value) {
+async function getCachedData(key, fetchData, mapData = (value) => value) {
   const cached = cache.get(key);
   if (cached !== null) {
-    return res.json(cached);
+    return { data: cached, stale: false };
   }
 
   try {
     const data = mapData(await fetchData());
     cache.set(key, data);
-    return res.json(data);
+    return { data, stale: false };
   } catch (error) {
-    if (!(error instanceof TmdbError)) {
-      console.error('เกิดข้อผิดพลาดระหว่างประมวลผลคำขอ:', error);
-      return sendError(res, 500, 'เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์');
+    if (error instanceof TmdbError) {
+      const stale = cache.getStale(key);
+      if (stale !== null) {
+        return { data: stale, stale: true };
+      }
     }
 
-    // ใช้ข้อมูลเดิมเมื่อ TMDB ขัดข้อง เพื่อให้ผู้ใช้ยังเห็นผลลัพธ์ได้ชั่วคราว
-    const stale = cache.getStale(key);
-    if (stale !== null) {
-      return res.json({ ...stale, stale: true });
-    }
-
-    return sendError(res, error.statusCode, error.message);
+    throw error;
   }
+}
+
+async function respondWithCache(res, key, fetchData, mapData = (value) => value) {
+  try {
+    const result = await getCachedData(key, fetchData, mapData);
+    return res.json(result.stale ? { ...result.data, stale: true } : result.data);
+  } catch (error) {
+    return handleRequestError(res, error);
+  }
+}
+
+function compareDescending(left, right) {
+  const leftValue = Number.isFinite(left) ? left : 0;
+  const rightValue = Number.isFinite(right) ? right : 0;
+  return rightValue - leftValue;
+}
+
+function compareTitles(left, right) {
+  const leftTitle = left.title || left.originalTitle || '';
+  const rightTitle = right.title || right.originalTitle || '';
+  return leftTitle.localeCompare(rightTitle);
+}
+
+function compareRating(left, right) {
+  return compareDescending(left.rating, right.rating)
+    || compareDescending(left.voteCount, right.voteCount)
+    || compareTitles(left, right);
+}
+
+function compareWeightedRating(left, right) {
+  return compareDescending(left.weightedRating, right.weightedRating)
+    || compareDescending(left.voteCount, right.voteCount)
+    || compareTitles(left, right);
+}
+
+function getMovieYear(movie) {
+  const year = Number.parseInt(movie.releaseDate?.slice(0, 4), 10);
+  return Number.isFinite(year) ? year : 0;
+}
+
+function getCatalogComparator(sort) {
+  if (sort === 'rating') {
+    return compareWeightedRating;
+  }
+  if (sort === 'year') {
+    return (left, right) => compareDescending(getMovieYear(left), getMovieYear(right))
+      || compareRating(left, right);
+  }
+  if (sort === 'title') {
+    return (left, right) => compareTitles(left, right) || compareRating(left, right);
+  }
+  return (left, right) => compareDescending(left.popularity, right.popularity)
+    || compareRating(left, right);
 }
 
 app.get('/api/movies/popular', (req, res) => {
@@ -147,6 +209,83 @@ app.get('/api/movies/popular', (req, res) => {
     () => fetchTmdb('/movie/popular', { page }),
     mapMoviePage,
   );
+});
+
+app.get('/api/catalog', async (req, res) => {
+  const sort = req.query.sort === undefined || req.query.sort === ''
+    ? 'popularity'
+    : req.query.sort;
+  const supportedSorts = new Set(['rating', 'year', 'popularity', 'title']);
+  if (typeof sort !== 'string' || !supportedSorts.has(sort)) {
+    return sendError(res, 400, 'sort ต้องเป็น rating, year, popularity หรือ title');
+  }
+
+  let genreId = null;
+  if (req.query.genre !== undefined) {
+    if (typeof req.query.genre !== 'string' || !/^\d+$/.test(req.query.genre)) {
+      return sendError(res, 400, 'genre ต้องเป็นจำนวนเต็มบวก');
+    }
+    genreId = Number(req.query.genre);
+    if (!Number.isSafeInteger(genreId) || genreId < 1) {
+      return sendError(res, 400, 'genre ต้องเป็นจำนวนเต็มบวก');
+    }
+  }
+
+  try {
+    const pages = await Promise.all(
+      [1, 2, 3, 4, 5].map((page) => getCachedData(
+        `popular:${page}`,
+        () => fetchTmdb('/movie/popular', { page }),
+        mapMoviePage,
+      )),
+    );
+    const uniqueMovies = new Map();
+    for (const { data } of pages) {
+      for (const movie of data.results) {
+        if (!uniqueMovies.has(movie.id)) {
+          uniqueMovies.set(movie.id, movie);
+        }
+      }
+    }
+
+    const catalogMovies = Array.from(uniqueMovies.values());
+    const averageRating = catalogMovies.length === 0
+      ? 0
+      : catalogMovies.reduce(
+        (sum, movie) => sum + (Number.isFinite(movie.rating) ? movie.rating : 0),
+        0,
+      ) / catalogMovies.length;
+    const moviesWithWeightedRating = catalogMovies.map((movie) => {
+      const rating = Number.isFinite(movie.rating) ? movie.rating : 0;
+      const voteCount = Number.isFinite(movie.voteCount) ? Math.max(0, movie.voteCount) : 0;
+      const priorWeight = 500;
+      // คะแนนดิบไม่สะท้อนความน่าเชื่อถือของจำนวนโหวต จึงถ่วงคะแนนเข้าหาค่าเฉลี่ยของแคตตาล็อก
+      const weightedRating = (
+        (voteCount / (voteCount + priorWeight)) * rating
+        + (priorWeight / (voteCount + priorWeight)) * averageRating
+      );
+      return { ...movie, weightedRating: Number(weightedRating.toFixed(3)) };
+    });
+    const filteredMovies = moviesWithWeightedRating.filter(
+      (movie) => genreId === null || movie.genreIds.includes(genreId),
+    );
+    const start = performance.now();
+    const results = mergeSort(filteredMovies, getCatalogComparator(sort));
+    const ms = Number((performance.now() - start).toFixed(2));
+
+    const response = {
+      total: results.length,
+      ms,
+      algorithm: 'Merge Sort',
+      results,
+    };
+    if (pages.some((page) => page.stale)) {
+      response.stale = true;
+    }
+    return res.json(response);
+  } catch (error) {
+    return handleRequestError(res, error);
+  }
 });
 
 app.get('/api/search', (req, res) => {

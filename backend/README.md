@@ -14,13 +14,18 @@ Express proxy สำหรับ TMDB API v3 ใช้ CommonJS และ Node.j
 ## API
 
 - `GET /api/movies/popular?page=1` (`page` ต้องอยู่ระหว่าง 1 ถึง 20)
+- `GET /api/catalog?sort=popularity&genre=28` (รวมหนัง popular 5 หน้า; `sort` รองรับ `rating`, `year`, `popularity` และ `title`)
 - `GET /api/search?q=คำค้น&page=1` (`q` ยาว 1 ถึง 100 ตัวอักษร และ `page` อยู่ระหว่าง 1 ถึง 20)
 - `GET /api/movies/:id` (รวม `credits` และ `videos` จาก TMDB)
 - `GET /api/genres`
 
 ผลลัพธ์หนังใช้ชื่อฟิลด์ `id`, `title`, `posterPath`, `rating`, `voteCount`,
-`releaseDate`, `genreIds` และ `overview` เท่านั้น ยกเว้น `credits` และ `videos`
+`popularity`, `releaseDate`, `originalTitle`, `genreIds` และ `overview` เท่านั้น ยกเว้น `credits` และ `videos`
 ที่ส่งมาพร้อมข้อมูลหน้าแสดงรายละเอียดหนัง
 
 ข้อมูลถูกเก็บในหน่วยความจำเป็นเวลา 5 นาที หาก TMDB ใช้งานไม่ได้ ระบบจะส่งข้อมูล
 ที่หมดอายุแล้วกลับมาพร้อม `stale: true` เมื่อมีข้อมูลเดิมอยู่
+
+`/api/catalog` เรียงตามคะแนนนิยมจาก TMDB มากไปน้อยเป็นค่าเริ่มต้น และเรียงปีใหม่ไปเก่า
+เมื่อใช้ `sort=year`; การเรียงคะแนนใช้ `voteCount` และชื่อเป็นเกณฑ์รองตามลำดับ
+รัน `node benchmark.js` จากโฟลเดอร์ `backend` เพื่อเปรียบเทียบเวลา Bubble Sort กับ Merge Sort
