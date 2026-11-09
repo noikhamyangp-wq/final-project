@@ -19,6 +19,16 @@ export function getPopular() {
   return request('/movies/popular')
 }
 
+export function getCatalog({ sort = 'popularity', genre = '' } = {}) {
+  const params = new URLSearchParams({ sort })
+  if (genre) params.set('genre', genre)
+  return request(`/catalog?${params.toString()}`)
+}
+
+export function getGenres() {
+  return request('/genres')
+}
+
 export function getMovie(id) {
   return request(`/movies/${encodeURIComponent(id)}`)
 }

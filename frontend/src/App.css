@@ -167,6 +167,123 @@ a:focus-visible {
   font-size: 14px;
 }
 
+.search-box {
+  position: relative;
+  margin-bottom: 14px;
+}
+
+.search-label,
+.filter-controls label span {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
+.search-input,
+.filter-controls select {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  color: var(--color-text);
+  background: var(--color-panel);
+}
+
+.search-input::placeholder {
+  color: #777783;
+}
+
+.search-suggestions {
+  position: absolute;
+  z-index: 3;
+  top: 100%;
+  right: 0;
+  left: 0;
+  max-height: 270px;
+  margin: 4px 0 0;
+  padding: 5px;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  background: var(--color-panel-raised);
+  box-shadow: 0 12px 30px rgb(0 0 0 / 30%);
+}
+
+.search-suggestion {
+  width: 100%;
+  padding: 9px 10px;
+  display: grid;
+  gap: 3px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--color-text);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.search-suggestion:hover {
+  background: rgb(255 255 255 / 7%);
+}
+
+.search-original-title {
+  color: var(--color-muted);
+  font-size: 11px;
+}
+
+.filter-bar {
+  margin-bottom: 24px;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: rgb(25 26 33 / 62%);
+}
+
+.filter-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.filter-controls label {
+  min-width: 0;
+}
+
+.filter-controls select {
+  cursor: pointer;
+}
+
+.filter-controls select:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.status-message-compact {
+  min-height: 0;
+  margin-top: 6px;
+  padding: 6px 8px;
+  gap: 6px;
+  border-radius: 7px;
+}
+
+.status-message-compact p {
+  font-size: 12px;
+}
+
+.status-message-compact .loading-spinner {
+  width: 18px;
+  height: 18px;
+}
+
+.status-message-compact .retry-button {
+  min-height: 30px;
+  padding: 0 11px;
+  font-size: 12px;
+}
+
 .movie-count {
   padding: 7px 11px;
   border: 1px solid var(--color-border);
@@ -324,6 +441,24 @@ a:focus-visible {
 .watchlist-heading span {
   color: var(--color-muted);
   font-size: 12px;
+}
+
+.undo-button {
+  width: 100%;
+  min-height: 34px;
+  margin: 0 0 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  color: var(--color-text);
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.undo-button:disabled {
+  color: var(--color-muted);
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .watchlist-empty {
@@ -690,6 +825,10 @@ a:focus-visible {
   .section-description {
     max-width: 240px;
     font-size: 12px;
+  }
+
+  .filter-controls {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .watchlist-list {

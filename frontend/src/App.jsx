@@ -1,11 +1,15 @@
-import { useEffect, useState } from 'react'
-import { getPopular } from './api/movies.js'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { getCatalog } from './api/movies.js'
 import Footer from './components/Footer.jsx'
+import FilterBar from './components/FilterBar.jsx'
 import Header from './components/Header.jsx'
 import MovieDetail from './components/MovieDetail.jsx'
 import MovieGrid from './components/MovieGrid.jsx'
+import SearchBox from './components/SearchBox.jsx'
 import StatusMessage from './components/StatusMessage.jsx'
 import WatchlistPanel from './components/WatchlistPanel.jsx'
+import Trie from './utils/trie.js'
+import Stack from './utils/stack.js'
 import './App.css'
 
 const WATCHLIST_STORAGE_KEY = 'movie-night-watchlist'
@@ -29,26 +33,20 @@ function App() {
   const [movies, setMovies] = useState([])
   const [status, setStatus] = useState('loading')
   const [selectedMovieId, setSelectedMovieId] = useState(null)
-
-  async function loadMovies() {
-    try {
-      const result = await getPopular()
-      setMovies(result.results)
-      setStatus(result.results.length === 0 ? 'empty' : 'success')
-    } catch (error) {
-      console.error('โหลดภาพยนตร์ยอดนิยมไม่สำเร็จ:', error)
-      setStatus('error')
-    }
-  }
-
-  function retryMovies() {
-    setStatus('loading')
-    loadMovies()
-  }
+  const [sort, setSort] = useState('popularity')
+  const [genre, setGenre] = useState('')
+  const [loadAttempt, setLoadAttempt] = useState(0)
+  const [canUndoRemoval, setCanUndoRemoval] = useState(false)
+  const removedMovies = useRef(new Stack())
+  const movieTrie = useMemo(
+    () => (status === 'success' ? new Trie(movies) : null),
+    [movies, status],
+  )
 
   useEffect(() => {
     let active = true
-    getPopular()
+
+    getCatalog({ sort, genre })
       .then((result) => {
         if (!active) return
         setMovies(result.results)
@@ -62,7 +60,7 @@ function App() {
     return () => {
       active = false
     }
-  }, [])
+  }, [sort, genre, loadAttempt])
 
   useEffect(() => {
     try {
@@ -72,12 +70,48 @@ function App() {
     }
   }, [watchlist])
 
+  function removeFromWatchlist(movie) {
+    if (!watchlist.some((item) => item.id === movie.id)) return
+
+    removedMovies.current.push(movie)
+    setCanUndoRemoval(true)
+    setWatchlist((current) => current.filter((item) => item.id !== movie.id))
+  }
+
   function toggleWatchlist(movie) {
+    if (watchlist.some((item) => item.id === movie.id)) {
+      removeFromWatchlist(movie)
+      return
+    }
+
     setWatchlist((current) => (
-      current.some((item) => item.id === movie.id)
-        ? current.filter((item) => item.id !== movie.id)
-        : [...current, movie]
+      current.some((item) => item.id === movie.id) ? current : [...current, movie]
     ))
+  }
+
+  function undoWatchlistRemoval() {
+    const movie = removedMovies.current.pop()
+    if (!movie) return
+
+    setWatchlist((current) => (
+      current.some((item) => item.id === movie.id) ? current : [...current, movie]
+    ))
+    setCanUndoRemoval(!removedMovies.current.isEmpty())
+  }
+
+  function retryMovies() {
+    setStatus('loading')
+    setLoadAttempt((current) => current + 1)
+  }
+
+  function changeSort(nextSort) {
+    setStatus('loading')
+    setSort(nextSort)
+  }
+
+  function changeGenre(nextGenre) {
+    setStatus('loading')
+    setGenre(nextGenre)
   }
 
   return (
@@ -97,6 +131,21 @@ function App() {
             )}
           </div>
 
+          <SearchBox
+            trie={movieTrie}
+            catalogStatus={status}
+            onSelectMovie={setSelectedMovieId}
+            onRetry={retryMovies}
+          />
+
+          <FilterBar
+            sort={sort}
+            genre={genre}
+            loading={status === 'loading'}
+            onSortChange={changeSort}
+            onGenreChange={changeGenre}
+          />
+
           {status === 'loading' && <StatusMessage type="loading" />}
           {status === 'empty' && <StatusMessage type="empty" />}
           {status === 'error' && (
@@ -114,8 +163,10 @@ function App() {
 
         <WatchlistPanel
           movies={watchlist}
-          onRemove={toggleWatchlist}
+          onRemove={removeFromWatchlist}
           onSelectMovie={setSelectedMovieId}
+          canUndo={canUndoRemoval}
+          onUndo={undoWatchlistRemoval}
         />
       </main>
 
