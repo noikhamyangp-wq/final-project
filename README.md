@@ -29,15 +29,15 @@
 
 ## 2. ตารางข้อแนะนำจากงานแรก → สิ่งที่แก้
 
-**หมายเหตุ:** งานแรกคือ LaLiga Table Tracker (OpenLigaDB API) ตอนนี้ยังไม่มีคอมเมนต์จากผู้สอนในงานแรก ข้อต่อไปนี้จึงเป็น **ข้อสังเกตที่ผู้จัดทำวิเคราะห์จากโค้ดงานแรกเอง** ไม่ใช่ข้อแนะนำของผู้สอน และเนื่องจากงานนี้เปลี่ยนไปใช้ TMDB API (ขออนุมัติผู้สอนแล้ว) จึงเทียบ Before → After ในเชิงวิศวกรรมที่ไม่ขึ้นกับ API
+**หมายเหตุ:** งานแรกเป็นงานกลุ่ม ภายหลังกลุ่มแยกกัน ผู้จัดทำทำงานนี้ใหม่คนเดียว และข้อสังเกตวิเคราะห์จากโค้ดงานแรกของกลุ่ม
 
-| ข้อแนะนำจากงานแรก (ข้อสังเกตที่วิเคราะห์เอง) | สิ่งที่แก้ในงานนี้ | หลักฐาน Before / After |
+| ปัญหาที่พบจากโค้ดงานแรกของกลุ่ม | สิ่งที่แก้ในงานนี้ | หลักฐาน Before / After |
 |---|---|---|
 | Queue และ History เป็นตัวแปรส่วนกลางบน server ทุกคนใช้ร่วมกัน และข้อมูลหายเมื่อ server รีสตาร์ต | Watchlist และ Undo อยู่ฝั่ง React (state + `localStorage`) แยกกันตามผู้ใช้ ใช้ Stack (`frontend/src/utils/stack.js`) | Before: `server.js` (งานแรก) ตัวแปร `queue`/`history` · After: `frontend/src/App.jsx`, `WatchlistPanel.jsx` · ภาพ: ภาพโค้ด queue/history ใน server.js งานแรก เทียบกับแผง "รายการที่อยากดู" พร้อมปุ่มย้อนกลับและรายการที่ยังอยู่หลังรีเฟรช (แสดงในคลิปช่วงที่ 2) |
 | เรียงตารางด้วย Bubble/Selection/Insertion Sort ฝั่ง server กับข้อมูล 20 ทีมที่ API เรียงมาแล้ว ผลเหมือนกัน ผู้ใช้ไม่เห็นความต่าง DSA ไม่ส่งผลต่อ UX | ใช้ Merge Sort (stable) เรียงแคตตาล็อก 100 เรื่องหลายเกณฑ์ ใช้คะแนนถ่วงน้ำหนักเพื่อไม่ให้หนังที่โหวตเดียวคะแนน 10 ขึ้นอันดับ 1 พร้อม benchmark เทียบ Bubble Sort | After: `backend/mergeSort.js`, `backend/benchmark.js`, route `/api/catalog` · ภาพ: คะแนนดิบ (Savage Prey อันดับ 1) เทียบคะแนนถ่วงน้ำหนัก (Shawshank อันดับ 1) · ผล benchmark ในหัวข้อ 4 |
 | Cache ไม่มีอายุ โหลดครั้งเดียวแล้วค้างจนรีสตาร์ต ข้อมูลเก่า | `backend/cache.js` ตั้ง TTL 5 นาที และส่งข้อมูลเก่า (`stale: true`) เมื่อ TMDB ล่ม | Before: `ensureTeamsLoaded` (งานแรก) · After: `backend/cache.js`, `fetchTmdb` ใน `server.js` · ภาพ: ภาพโค้ด ensureTeamsLoaded งานแรก เทียบกับ cache.js ที่มี CACHE_TTL_MS และ getStale (แสดงในคลิปช่วงที่ 2) |
 | ข้อมูลดาวซัลโวเขียนตายตัวในโค้ด ไม่ใช่ข้อมูลจริง | ข้อมูลทั้งหมดมาจาก TMDB ผ่าน Express ไม่มีข้อมูลฝังในโค้ด | Before: ตัวแปร `topScorers` (งานแรก) · After: ทุก route ใน `backend/server.js` |
-| Express เป็นแค่ทางผ่าน ไม่ validate พารามิเตอร์ และฝังค่าคงที่ (พอร์ต ปี) ในโค้ด | ซ่อน API key ใน `.env`, validate `page` (1–20), `q` (1–100 ตัวอักษร), `genre` (จำนวนเต็มบวก), ตอบ error ภาษาไทยพร้อม status code, ตัดฟิลด์ที่ไม่ใช้ก่อนส่งให้ frontend | After: `backend/server.js`, `backend/.env.example` · ภาพ: error ของ `page=999` |
+| | Express งานแรกไม่ validate พารามิเตอร์ `algo` (ค่าแปลกตกไป Selection Sort เงียบ ๆ) และฝังพอร์ตกับปีไว้ใน URL ในโค้ด | ซ่อน API key ใน `.env`, validate `page` (1–20), `q` (1–100 ตัวอักษร), `genre` (จำนวนเต็มบวก), ตอบ error ภาษาไทยพร้อม status code, ตัดฟิลด์ที่ไม่ใช้ก่อนส่งให้ frontend | Before: `/teams?algo=...` และค่าคงที่ `API_URL`, `PORT` ใน `server.js` (งานแรก) · After: `backend/server.js`, `backend/.env.example` · ภาพ: error ของ `page=999` |
 | Frontend เป็นไฟล์ JS ไฟล์เดียวใช้ `onclick` และ `innerHTML` ไม่แยก component | แยกเป็น React component ตาม Component Tree ในหัวข้อ 3 | Before: `public/dashboard.js` (งานแรก) · After: `frontend/src/components/*` |
 | README งานแรกเขียนวิธีรันไม่จบ | README นี้มีวิธีรัน โครงสร้าง และตารางครบ | ไฟล์นี้ |
 
